@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>慣性實驗挑戰 - 硬幣落杯</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes paperSlide {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(var(--slide-distance)); opacity: 0; }
+        }
+        
+        @keyframes coinDrop {
+            0% { transform: translateY(0); }
+            20% { transform: translateY(-5px); }
+            100% { transform: translateY(80px); }
+        }
+        
+        @keyframes coinFail {
+            0% { transform: translateY(0) translateX(0); }
+            30% { transform: translateY(-10px) translateX(var(--fail-direction)); }
+            100% { transform: translateY(150px) translateX(var(--fail-direction)); opacity: 0; }
+        }
+        
+        @keyframes coinFollowPaper {
+            0% { transform: translateY(0) translateX(0); }
+            100% { transform: translateY(0) translateX(var(--slide-distance)); opacity: 0; }
+        }
+        
+        .paper-slide {
+            animation: paperSlide var(--slide-duration) ease-out forwards;
+        }
+        
+        .coin-drop {
+            animation: coinDrop 0.8s ease-in forwards;
+        }
+        
+        .coin-fail {
+            animation: coinFail 1s ease-in forwards;
+        }
+        
+        .coin-follow-paper {
+            animation: coinFollowPaper var(--slide-duration) ease-out forwards;
+        }
+        
+        .cup {
+            width: 120px;
+            height: 100px;
+            background: linear-gradient(to bottom, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%);
+            border-radius: 0 0 60px 60px;
+            border: 3px solid #64748b;
+            position: relative;
+            box-shadow: 
+                inset 0 2px 4px rgba(255,255,255,0.8),
+                inset 0 -2px 4px rgba(0,0,0,0.1),
+                0 4px 8px rgba(0,0,0,0.15);
+        }
+        
+        .cup::before {
+            content: '';
+            position: absolute;
+            top: -3px;
+            left: -10px;
+            right: -10px;
+            height: 8px;
+            background: linear-gradient(to bottom, #94a3b8, #64748b);
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .cup::after {
+            content: '';
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+            border-radius: 50%;
+        }
+        
+        .paper {
+            width: 140px;
+            height: 4px;
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            position: absolute;
+            top: -6px;
+            left: -10px;
+            z-index: 10;
+        }
+        
+        .coin {
+            width: 30px;
+            height: 30px;
+            background: radial-gradient(circle at 30% 30%, #fbbf24, #f59e0b);
+            border: 2px solid #d97706;
+            border-radius: 50%;
+            position: absolute;
+            top: -35px;
+            left: 45px;
+            z-index: 5;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .coin::before {
+            content: '¥';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 14px;
+            font-weight: bold;
+            color: #92400e;
+        }
+        
+        .power-fill {
+            background: linear-gradient(90deg, #10b981 0%, #10b981 100%);
+            transition: width 0.1s ease;
+        }
+        
+        .shake {
+            animation: shake 0.5s ease-in-out;
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        
+        .success-glow {
+            box-shadow: 0 0 20px #10b981;
+            animation: glow 1s ease-in-out;
+        }
+        
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 20px #10b981; }
+            50% { box-shadow: 0 0 30px #10b981; }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen p-8">
+    <div class="max-w-4xl mx-auto">
+        <!-- 標題和分數 -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-4">🎯 慣性實驗挑戰</h1>
+            <p class="text-lg text-gray-600 mb-4">掌握時機和力道，讓硬幣完美落入杯中！</p>
+            <div class="flex justify-center gap-8 text-lg font-semibold">
+                <div class="bg-green-100 px-4 py-2 rounded-lg">
+                    <span class="text-green-800">成功: </span>
+                    <span id="successCount" class="text-green-600">0</span>
+                </div>
+                <div class="bg-red-100 px-4 py-2 rounded-lg">
+                    <span class="text-red-800">失敗: </span>
+                    <span id="failCount" class="text-red-600">0</span>
+                </div>
+                <div class="bg-blue-100 px-4 py-2 rounded-lg">
+                    <span class="text-blue-800">成功率: </span>
+                    <span id="successRate" class="text-blue-600">0%</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 實驗區域 -->
+        <div class="bg-white rounded-2xl shadow-xl p-8 mb-8">
+            <div class="flex flex-col lg:flex-row gap-8 items-center">
+                <!-- 控制面板 -->
+                <div class="lg:w-1/3">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">🎮 操作控制</h2>
+                    
+                    <!-- 操作說明 -->
+                    <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                        <h3 class="font-semibold text-yellow-800 mb-2">📋 操作說明</h3>
+                        <ol class="text-sm text-yellow-700 space-y-1">
+                            <li>1. 按住「蓄力」按鈕開始循環</li>
+                            <li>2. 觀察力道條在綠色區域時</li>
+                            <li>3. 在適中力道時鬆開按鈕</li>
+                            <li>4. 力道太輕或太重都會失敗</li>
+                        </ol>
+                    </div>
+                </div>
+                
+                <!-- 實驗演示 -->
+                <div class="lg:w-2/3 flex flex-col items-center">
+                    <div class="relative mb-8" style="height: 200px; width: 200px;">
+                        <div class="absolute bottom-0 left-1/2 transform -translate-x-1/2">
+                            <div class="cup" id="cup">
+                                <div class="paper" id="paper"></div>
+                                <div class="coin" id="coin"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- 小型蓄力條 -->
+                        <div class="absolute top-4 right-0 w-48">
+                            <div class="text-xs text-gray-600 mb-1 text-center">抽取力道</div>
+                            <div class="h-3 bg-gray-200 rounded-full relative overflow-hidden">
+                                <div id="powerFill" class="absolute h-full w-4 bg-green-500 rounded-full transition-all duration-75" style="left: 0%"></div>
+                            </div>
+                            <div class="flex justify-between text-xs text-gray-500 mt-1">
+                                <span>太輕</span>
+                                <span class="text-green-600">適中</span>
+                                <span>太重</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-center">
+                        <button 
+                            id="chargeBtn"
+                            class="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold py-4 px-8 rounded-full shadow-lg transform hover:scale-105 transition-all duration-200 text-lg mb-4"
+                        >
+                            🚀 按住蓄力
+                        </button>
+                        
+                        <div id="resultMessage" class="text-lg font-semibold h-8"></div>
+                        
+                        <button 
+                            id="resetBtn"
+                            class="mt-4 bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-6 rounded-full shadow-md transition-all duration-200"
+                        >
+                            🔄 重新開始
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 技巧提示 -->
+        <div class="bg-white rounded-2xl shadow-xl p-8">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6">💡 成功技巧</h2>
+            <div class="grid md:grid-cols-3 gap-6">
+                <div class="bg-green-50 p-6 rounded-xl text-center">
+                    <div class="text-3xl mb-3">⚡</div>
+                    <h3 class="text-lg font-semibold text-green-800 mb-2">力道控制</h3>
+                    <p class="text-sm text-gray-700">力道要適中，太輕紙片拖動硬幣，太重硬幣會偏移</p>
+                </div>
+                <div class="bg-blue-50 p-6 rounded-xl text-center">
+                    <div class="text-3xl mb-3">🎯</div>
+                    <h3 class="text-lg font-semibold text-blue-800 mb-2">精準時機</h3>
+                    <p class="text-sm text-gray-700">觀察力道條，在綠色適中區域時鬆開按鈕</p>
+                </div>
+                <div class="bg-purple-50 p-6 rounded-xl text-center">
+                    <div class="text-3xl mb-3">🏆</div>
+                    <h3 class="text-lg font-semibold text-purple-800 mb-2">完美結合</h3>
+                    <p class="text-sm text-gray-700">力道和時機的完美結合是成功的關鍵</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let power = 0;
+        let isCharging = false;
+        let isAnimating = false;
+        let powerDirection = 1;
+        let powerInterval;
+        let successCount = 0;
+        let failCount = 0;
+        
+        const chargeBtn = document.getElementById('chargeBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const powerFill = document.getElementById('powerFill');
+        const paper = document.getElementById('paper');
+        const coin = document.getElementById('coin');
+        const cup = document.getElementById('cup');
+        const resultMessage = document.getElementById('resultMessage');
+        const successCountEl = document.getElementById('successCount');
+        const failCountEl = document.getElementById('failCount');
+        const successRateEl = document.getElementById('successRate');
+        
+        chargeBtn.addEventListener('mousedown', startCharging);
+        chargeBtn.addEventListener('touchstart', startCharging);
+        chargeBtn.addEventListener('mouseup', stopCharging);
+        chargeBtn.addEventListener('mouseleave', stopCharging);
+        chargeBtn.addEventListener('touchend', stopCharging);
+        
+        function startCharging(e) {
+            e.preventDefault();
+            if (isAnimating) return;
+            
+            isCharging = true;
+            power = 0;
+            powerDirection = 1;
+            chargeBtn.textContent = '力道循環中... 鬆開執行！';
+            chargeBtn.classList.add('bg-red-500', 'hover:bg-red-600');
+            chargeBtn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+            
+            powerInterval = setInterval(() => {
+                if (!isCharging) {
+                    clearInterval(powerInterval);
+                    return;
+                }
+                
+                power += powerDirection * 2;
+                
+                if (power >= 100) {
+                    power = 100;
+                    powerDirection = -1;
+                } else if (power <= 0) {
+                    power = 0;
+                    powerDirection = 1;
+                }
+                
+                // 計算小段的位置 (0-100% 對應到 0-91.7% 的移動範圍，因為小段本身佔8.3%)
+                const maxPosition = 91.7; // 最大移動範圍 (100% - 8.3% 小段寬度)
+                const position = (power / 100) * maxPosition;
+                powerFill.style.left = position + '%';
+            }, 20);
+        }
+        
+        function stopCharging() {
+            if (!isCharging || isAnimating) return;
+            
+            isCharging = false;
+            isAnimating = true;
+            clearInterval(powerInterval);
+            
+            chargeBtn.textContent = '實驗進行中...';
+            chargeBtn.disabled = true;
+            
+            const powerSuccess = power >= 30 && power <= 70;
+            executeExperiment(powerSuccess, power);
+        }
+        
+        function executeExperiment(success, power) {
+            const slideSpeed = Math.max(0.1, Math.min(0.5, power / 200));
+            const slideDistance = Math.max(100, Math.min(300, power * 2));
+            
+            paper.style.setProperty('--slide-duration', slideSpeed + 's');
+            paper.style.setProperty('--slide-distance', slideDistance + 'px');
+            coin.style.setProperty('--slide-duration', slideSpeed + 's');
+            coin.style.setProperty('--slide-distance', slideDistance + 'px');
+            
+            paper.classList.add('paper-slide');
+            
+            setTimeout(() => {
+                if (success) {
+                    // 力道適中：硬幣垂直落下
+                    coin.classList.add('coin-drop');
+                    cup.classList.add('success-glow');
+                    resultMessage.textContent = '🎉 完美成功！';
+                    resultMessage.className = 'text-lg font-semibold h-8 text-green-600';
+                    successCount++;
+                } else if (power < 30) {
+                    // 力道太輕：硬幣跟著紙片一起被拖走
+                    coin.classList.add('coin-follow-paper');
+                    cup.classList.add('shake');
+                    resultMessage.textContent = '😅 力道太輕了！硬幣被拖走了！';
+                    resultMessage.className = 'text-lg font-semibold h-8 text-red-600';
+                    failCount++;
+                } else {
+                    // 力道太重：硬幣噴飛出去（向相反方向）
+                    const failDirection = power > 85 ? '-100px' : '-70px';
+                    coin.style.setProperty('--fail-direction', failDirection);
+                    coin.classList.add('coin-fail');
+                    cup.classList.add('shake');
+                    resultMessage.textContent = '💥 力道太重了！硬幣噴飛了！';
+                    resultMessage.className = 'text-lg font-semibold h-8 text-red-600';
+                    failCount++;
+                }
+                
+                updateStats();
+                
+                setTimeout(() => {
+                    isAnimating = false;
+                    chargeBtn.disabled = false;
+                }, 1000);
+                
+            }, slideSpeed * 1000 * 0.3);
+        }
+        
+        function updateStats() {
+            const total = successCount + failCount;
+            const rate = total > 0 ? Math.round((successCount / total) * 100) : 0;
+            
+            successCountEl.textContent = successCount;
+            failCountEl.textContent = failCount;
+            successRateEl.textContent = rate + '%';
+        }
+        
+        resetBtn.addEventListener('click', () => {
+            paper.classList.remove('paper-slide');
+            coin.classList.remove('coin-drop', 'coin-fail', 'coin-follow-paper');
+            cup.classList.remove('success-glow', 'shake');
+            
+            power = 0;
+            powerFill.style.left = '0%';
+            resultMessage.textContent = '';
+            
+            chargeBtn.textContent = '🚀 按住蓄力';
+            chargeBtn.disabled = false;
+            chargeBtn.classList.remove('bg-red-500', 'hover:bg-red-600');
+            chargeBtn.classList.add('bg-blue-500', 'hover:bg-blue-600');
+            
+            isCharging = false;
+            isAnimating = false;
+            powerDirection = 1;
+        });
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'98477a7086f3a34f',t:'MTc1ODc3MTM5Ny4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
